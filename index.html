@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="favicon.png">
+<title>Company news</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1400px;
+         margin: 48px auto; padding: 0 24px; color: #1a1a1a; }
+  input { width: 100%; font: inherit; font-size: 15px; padding: 10px;
+          box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; }
+  button { padding: 10px 20px; font-size: 15px; border: none;
+           border-radius: 6px; background: #1a1a1a; color: white; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .hint { color: #666; font-size: 13px; }
+  .status { margin-top: 10px; font-size: 14px; min-height: 1.2em; color: #666; }
+  .status.error { color: #b3261e; }
+  #login-row { display: flex; flex-direction: column; gap: 8px; max-width: 320px; }
+  #topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
+  #signout { background: none; color: #666; padding: 4px 0; font-size: 13px;
+             text-decoration: underline; }
+
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+  .company-card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px 18px; min-width: 0; }
+  .company-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .company-header h3 { margin: 0; font-size: 15px; }
+  .company-header label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; flex-shrink: 0; }
+  .poll-warning { font-size: 11px; color: #b3261e; margin: -6px 0 10px; }
+  .item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .item-list li { border-top: 1px solid #f0f0f0; padding-top: 10px; }
+  .item-list li:first-child { border-top: none; padding-top: 0; }
+  .item-title { font-size: 13.5px; font-weight: 500; color: #1a1a1a; text-decoration: none; line-height: 1.35; }
+  .item-title:hover { text-decoration: underline; }
+  .item-meta { font-size: 11.5px; color: #888; margin-top: 2px; }
+  .item-summary { font-size: 12.5px; color: #555; margin-top: 4px; line-height: 1.4; }
+  .empty-note { font-size: 13px; color: #999; }
+</style>
+</head>
+<body>
+<div id="app"><p>Loading…</p></div>
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+  const SUPABASE_URL = "https://eyejmvryyiaymrlenhxa.supabase.co";
+  const PUBLISHABLE_KEY = "sb_publishable_QI6BiGiDmlBZwpA_TAq8Qg_uDjoKKKv";
+  const API_BASE = `${SUPABASE_URL}/functions/v1/company-news`;
+
+  const supabase = createClient(SUPABASE_URL, PUBLISHABLE_KEY);
+  const app = document.getElementById("app");
+
+  function el(tag, props = {}, children = []) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(props)) {
+      if (key === "text") node.textContent = value;
+      else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+      else node.setAttribute(key, value);
+    }
+    for (const child of children) node.appendChild(child);
+    return node;
+  }
+
+  function renderLogin() {
+    app.innerHTML = "";
+    const status = el("div", { class: "status" });
+    const emailInput = el("input", { type: "email", placeholder: "Email", autocomplete: "username" });
+    const passwordInput = el("input", { type: "password", placeholder: "Password", autocomplete: "current-password" });
+    const signInBtn = el("button", {
+      text: "Sign in",
+      onclick: async () => {
+        signInBtn.disabled = true;
+        status.className = "status";
+        status.textContent = "Signing in…";
+        const { error } = await supabase.auth.signInWithPassword({
+          email: emailInput.value.trim(),
+          password: passwordInput.value,
+        });
+        if (error) {
+          status.className = "status error";
+          status.textContent = error.message;
+          signInBtn.disabled = false;
+          return;
+        }
+        renderApp();
+      },
+    });
+    passwordInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") signInBtn.click();
+    });
+
+    app.append(
+      el("h2", { text: "Company news" }),
+      el("p", { class: "hint", text: "Sign in with your Personal OS account." }),
+      el("div", { id: "login-row" }, [emailInput, passwordInput, signInBtn]),
+      status,
+    );
+  }
+
+  // Re-fetches the session right before each request rather than reusing a
+  // variable closed over earlier — supabase-js refreshes the token in the
+  // background, but a stale closure keeps sending an expired JWT and getting
+  // 401s until the page is reloaded (same fix as the ask/usage pages).
+  async function authHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    return { Authorization: `Bearer ${session.access_token}`, apikey: PUBLISHABLE_KEY };
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "";
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  function formatSource(source) {
+    return (source || "").replace(/^www\./, "");
+  }
+
+  function renderItemRow(item) {
+    const parts = [formatSource(item.source), formatDate(item.published_at || item.captured_at)].filter(Boolean);
+    const children = [
+      item.url
+        ? el("a", { class: "item-title", href: item.url, target: "_blank", rel: "noopener noreferrer", text: item.title || "Untitled" })
+        : el("div", { class: "item-title", text: item.title || "Untitled" }),
+      el("div", { class: "item-meta", text: parts.join(" · ") }),
+    ];
+    if (item.summary) children.push(el("div", { class: "item-summary", text: item.summary }));
+    return el("li", {}, children);
+  }
+
+  function renderCompanyCard(entry, onToggle) {
+    const status = el("span", { class: "hint" });
+    const checkbox = el("input", {
+      type: "checkbox",
+      style: "width: auto;",
+      ...(entry.active ? { checked: "checked" } : {}),
+      onchange: async (e) => {
+        e.target.disabled = true;
+        status.textContent = "Saving…";
+        const ok = await onToggle(entry.feed_id, e.target.checked);
+        status.textContent = ok ? "" : "Failed — try again";
+        e.target.disabled = false;
+      },
+    });
+    const header = el("div", { class: "company-header" }, [
+      el("h3", { text: entry.company }),
+      el("label", {}, [checkbox, el("span", { text: "watching" }), status]),
+    ]);
+
+    const children = [header];
+    if (entry.last_poll_status === "failed") {
+      children.push(el("div", {
+        class: "poll-warning",
+        text: `Last check failed${entry.last_poll_error ? `: ${entry.last_poll_error}` : ""}`,
+      }));
+    }
+    children.push(
+      entry.items.length
+        ? el("ul", { class: "item-list" }, entry.items.map(renderItemRow))
+        : el("p", { class: "empty-note", text: "Nothing captured yet." }),
+    );
+
+    return el("div", { class: "company-card" }, children);
+  }
+
+  function renderError(message) {
+    app.innerHTML = "";
+    app.appendChild(el("p", { text: message }));
+  }
+
+  async function renderApp() {
+    app.innerHTML = "<p>Loading…</p>";
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      renderLogin();
+      return;
+    }
+
+    const signOutBtn = el("button", {
+      id: "signout",
+      text: "Sign out",
+      onclick: async () => {
+        await supabase.auth.signOut();
+        renderLogin();
+      },
+    });
+
+    let data;
+    try {
+      const res = await fetch(API_BASE, {
+        headers: { Authorization: `Bearer ${session.access_token}`, apikey: PUBLISHABLE_KEY },
+      });
+      if (res.status === 401) {
+        renderLogin();
+        return;
+      }
+      data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    } catch (err) {
+      renderError(`Something went wrong loading company news (${err.message || "network error"}) — please reload the page.`);
+      return;
+    }
+
+    const onToggle = async (feedId, active) => {
+      try {
+        const headers = await authHeaders();
+        if (!headers) {
+          renderLogin();
+          return false;
+        }
+        const res = await fetch(API_BASE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ action: "toggle_company", feed_id: feedId, active }),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    };
+
+    app.innerHTML = "";
+    app.append(
+      el("div", { id: "topbar" }, [el("h2", { text: "Company news" }), signOutBtn]),
+      el("p", { class: "hint", text: "Recent coverage per company, from a Google News search run for each — uncheck one to stop watching it (past items stay)." }),
+      el("div", { id: "grid" }, (data.companies ?? []).map((entry) => renderCompanyCard(entry, onToggle))),
+    );
+  }
+
+  renderApp();
+</script>
+</body>
+</html>
