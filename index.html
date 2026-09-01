@@ -298,7 +298,7 @@
         el("span", { class: "company-name", text: entry.company }),
       ];
       if (entry.recent_count > 0) {
-        rowChildren.push(el("span", { class: "recent-badge", title: "Items from the last 7 days", text: `${entry.recent_count} new` }));
+        rowChildren.push(el("span", { class: "recent-badge", title: "Items from the last 7 days", text: `${entry.recent_count} recent` }));
       }
       rowChildren.push(removeBtn);
       li.append(...rowChildren);
