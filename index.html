@@ -46,7 +46,6 @@
   .drag-handle { color: #bbb; font-size: 13px; cursor: grab; flex-shrink: 0; padding: 0 2px; user-select: none; }
   .watching-checkbox { width: auto; flex-shrink: 0; }
   .company-name { flex: 1; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .company-count { font-size: 12px; color: #999; flex-shrink: 0; }
   .recent-badge { background: #1a73e8; color: white; font-size: 11px; font-weight: 600;
                    line-height: 1; padding: 3px 6px; border-radius: 4px; flex-shrink: 0; }
   .remove-btn { background: none; color: #bbb; font-size: 15px; line-height: 1; padding: 2px 4px;
@@ -299,12 +298,9 @@
         el("span", { class: "company-name", text: entry.company }),
       ];
       if (entry.recent_count > 0) {
-        rowChildren.push(el("span", { class: "recent-badge", title: "Items from the last 7 days", text: String(entry.recent_count) }));
+        rowChildren.push(el("span", { class: "recent-badge", title: "Items from the last 7 days", text: `${entry.recent_count} new` }));
       }
-      rowChildren.push(
-        el("span", { class: "company-count", text: String(entry.items.length) }),
-        removeBtn,
-      );
+      rowChildren.push(removeBtn);
       li.append(...rowChildren);
       listEl.appendChild(li);
     });
