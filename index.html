@@ -7,35 +7,64 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <title>Company news</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1400px;
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1100px;
          margin: 48px auto; padding: 0 24px; color: #1a1a1a; }
-  input { width: 100%; font: inherit; font-size: 15px; padding: 10px;
+  input { width: 100%; font: inherit; font-size: 14px; padding: 8px 10px;
           box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; }
-  button { padding: 10px 20px; font-size: 15px; border: none;
+  button { padding: 9px 16px; font-size: 14px; border: none;
            border-radius: 6px; background: #1a1a1a; color: white; cursor: pointer; }
   button:disabled { opacity: 0.5; cursor: default; }
   .hint { color: #666; font-size: 13px; }
-  .status { margin-top: 10px; font-size: 14px; min-height: 1.2em; color: #666; }
+  .status { margin-top: 8px; font-size: 13px; min-height: 1.2em; color: #666; }
   .status.error { color: #b3261e; }
   #login-row { display: flex; flex-direction: column; gap: 8px; max-width: 320px; }
   #topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
   #signout { background: none; color: #666; padding: 4px 0; font-size: 13px;
              text-decoration: underline; }
 
-  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-  .company-card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px 18px; min-width: 0; }
-  .company-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-  .company-header h3 { margin: 0; font-size: 15px; }
-  .company-header label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; flex-shrink: 0; }
-  .poll-warning { font-size: 11px; color: #b3261e; margin: -6px 0 10px; }
-  .item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-  .item-list li { border-top: 1px solid #f0f0f0; padding-top: 10px; }
+  #layout { display: flex; gap: 24px; align-items: flex-start; }
+  #left-pane { flex: 0 0 300px; min-width: 0; }
+  #right-pane { flex: 1; min-width: 0; }
+  @media (max-width: 720px) {
+    #layout { flex-direction: column; }
+    #left-pane { flex: 1; width: 100%; }
+  }
+
+  #add-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  #add-row .add-inputs { display: flex; gap: 6px; }
+  #add-row input[name="company"] { flex: 2; }
+  #add-row input[name="extra"] { flex: 3; }
+
+  ul.company-list { list-style: none; margin: 0; padding: 0; border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; }
+  ul.company-list li { display: flex; align-items: center; gap: 6px; padding: 9px 10px;
+                        border-bottom: 1px solid #eee; cursor: pointer; background: white; }
+  ul.company-list li:last-child { border-bottom: none; }
+  ul.company-list li:hover { background: #fafafa; }
+  ul.company-list li.selected { background: #f0f0f0; }
+  ul.company-list li.paused { opacity: 0.55; }
+  ul.company-list li.drag-over { box-shadow: inset 0 2px 0 #1a1a1a; }
+  .drag-handle { color: #bbb; font-size: 13px; cursor: grab; flex-shrink: 0; padding: 0 2px; user-select: none; }
+  .company-name { flex: 1; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .company-count { font-size: 12px; color: #999; flex-shrink: 0; }
+  .remove-btn { background: none; color: #bbb; font-size: 15px; line-height: 1; padding: 2px 4px;
+                border-radius: 4px; flex-shrink: 0; }
+  .remove-btn:hover { color: #b3261e; background: #fdecea; }
+  .empty-list-note { padding: 14px 10px; font-size: 13px; color: #999; }
+
+  #right-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  #right-header h3 { margin: 0; font-size: 17px; }
+  #right-header label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; flex-shrink: 0; }
+  #right-header input[type="checkbox"] { width: auto; }
+  .poll-warning { font-size: 12px; color: #b3261e; margin: 4px 0 10px; }
+  .item-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  .item-list li { border-top: 1px solid #f0f0f0; padding-top: 14px; }
   .item-list li:first-child { border-top: none; padding-top: 0; }
-  .item-title { font-size: 13.5px; font-weight: 500; color: #1a1a1a; text-decoration: none; line-height: 1.35; }
+  .item-title { font-size: 14.5px; font-weight: 500; color: #1a1a1a; text-decoration: none; line-height: 1.4; }
   .item-title:hover { text-decoration: underline; }
-  .item-meta { font-size: 11.5px; color: #888; margin-top: 2px; }
-  .item-summary { font-size: 12.5px; color: #555; margin-top: 4px; line-height: 1.4; }
+  .item-meta { font-size: 12px; color: #888; margin-top: 3px; }
+  .item-summary { font-size: 13px; color: #555; margin-top: 5px; line-height: 1.45; }
   .empty-note { font-size: 13px; color: #999; }
+  .no-selection { color: #999; font-size: 14px; padding-top: 8px; }
 </style>
 </head>
 <body>
@@ -49,6 +78,11 @@
 
   const supabase = createClient(SUPABASE_URL, PUBLISHABLE_KEY);
   const app = document.getElementById("app");
+
+  // In-memory page state — companies (in display order) and which one is
+  // shown in the right pane.
+  let companies = [];
+  let selectedFeedId = null;
 
   function el(tag, props = {}, children = []) {
     const node = document.createElement(tag);
@@ -107,6 +141,28 @@
     return { Authorization: `Bearer ${session.access_token}`, apikey: PUBLISHABLE_KEY };
   }
 
+  async function postAction(payload) {
+    const headers = await authHeaders();
+    if (!headers) return { ok: false, error: "not_signed_in" };
+    try {
+      const res = await fetch(API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(payload),
+      });
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
+      if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: err.message || "network error" };
+    }
+  }
+
   function formatDate(iso) {
     if (!iso) return "";
     return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -128,39 +184,186 @@
     return el("li", {}, children);
   }
 
-  function renderCompanyCard(entry, onToggle) {
-    const status = el("span", { class: "hint" });
+  // ---- Left pane: draggable, removable, selectable company list ----
+
+  let dragFromIndex = null;
+
+  function renderLeftList(container) {
+    container.innerHTML = "";
+    if (!companies.length) {
+      container.appendChild(el("div", { class: "empty-list-note", text: "No companies yet — add one above." }));
+      return;
+    }
+
+    const listEl = el("ul", { class: "company-list" });
+    companies.forEach((entry, index) => {
+      const li = el("li", {
+        draggable: "true",
+        onclick: () => {
+          selectedFeedId = entry.feed_id;
+          renderLeftList(container);
+          renderRightPane();
+        },
+        ondragstart: (e) => {
+          dragFromIndex = index;
+          e.dataTransfer.effectAllowed = "move";
+        },
+        ondragover: (e) => {
+          e.preventDefault();
+          li.classList.add("drag-over");
+        },
+        ondragleave: () => li.classList.remove("drag-over"),
+        ondrop: async (e) => {
+          e.preventDefault();
+          li.classList.remove("drag-over");
+          if (dragFromIndex === null || dragFromIndex === index) return;
+          const [moved] = companies.splice(dragFromIndex, 1);
+          companies.splice(index, 0, moved);
+          dragFromIndex = null;
+          renderLeftList(container);
+          const result = await postAction({ action: "reorder_companies", feed_ids: companies.map((c) => c.feed_id) });
+          if (!result.ok) {
+            // Order still shown locally even if the save failed — a reload
+            // will revert to the last saved order, which is an acceptable
+            // way to surface the failure without a blocking error dialog.
+          }
+        },
+        ondragend: () => {
+          dragFromIndex = null;
+          container.querySelectorAll("li.drag-over").forEach((n) => n.classList.remove("drag-over"));
+        },
+      });
+      if (entry.feed_id === selectedFeedId) li.classList.add("selected");
+      if (!entry.active) li.classList.add("paused");
+
+      const removeBtn = el("button", {
+        class: "remove-btn",
+        text: "×",
+        title: "Remove company",
+        onclick: async (e) => {
+          e.stopPropagation();
+          removeBtn.disabled = true;
+          const result = await postAction({ action: "remove_company", feed_id: entry.feed_id });
+          if (!result.ok) {
+            removeBtn.disabled = false;
+            return;
+          }
+          companies = companies.filter((c) => c.feed_id !== entry.feed_id);
+          if (selectedFeedId === entry.feed_id) {
+            selectedFeedId = companies[0]?.feed_id ?? null;
+          }
+          renderLeftList(container);
+          renderRightPane();
+        },
+      });
+
+      li.append(
+        el("span", { class: "drag-handle", text: "⠿" }),
+        el("span", { class: "company-name", text: entry.company }),
+        el("span", { class: "company-count", text: String(entry.items.length) }),
+        removeBtn,
+      );
+      listEl.appendChild(li);
+    });
+    container.appendChild(listEl);
+  }
+
+  // ---- Right pane: selected company's items ----
+
+  function renderRightPane() {
+    const container = document.getElementById("right-pane");
+    container.innerHTML = "";
+
+    const entry = companies.find((c) => c.feed_id === selectedFeedId);
+    if (!entry) {
+      container.appendChild(el("p", { class: "no-selection", text: "Select a company on the left to see its recent coverage." }));
+      return;
+    }
+
+    const toggleStatus = el("span", { class: "hint" });
     const checkbox = el("input", {
       type: "checkbox",
-      style: "width: auto;",
       ...(entry.active ? { checked: "checked" } : {}),
       onchange: async (e) => {
         e.target.disabled = true;
-        status.textContent = "Saving…";
-        const ok = await onToggle(entry.feed_id, e.target.checked);
-        status.textContent = ok ? "" : "Failed — try again";
+        toggleStatus.textContent = "Saving…";
+        const result = await postAction({ action: "toggle_company", feed_id: entry.feed_id, active: e.target.checked });
+        if (result.ok) {
+          entry.active = e.target.checked;
+          toggleStatus.textContent = "";
+          const leftContainer = document.getElementById("left-pane-list");
+          if (leftContainer) renderLeftList(leftContainer);
+        } else {
+          toggleStatus.textContent = "Failed — try again";
+        }
         e.target.disabled = false;
       },
     });
-    const header = el("div", { class: "company-header" }, [
+    const header = el("div", { id: "right-header" }, [
       el("h3", { text: entry.company }),
-      el("label", {}, [checkbox, el("span", { text: "watching" }), status]),
+      el("label", {}, [checkbox, el("span", { text: "watching" }), toggleStatus]),
     ]);
 
-    const children = [header];
+    container.append(header);
     if (entry.last_poll_status === "failed") {
-      children.push(el("div", {
+      container.append(el("div", {
         class: "poll-warning",
         text: `Last check failed${entry.last_poll_error ? `: ${entry.last_poll_error}` : ""}`,
       }));
     }
-    children.push(
+    container.append(
       entry.items.length
         ? el("ul", { class: "item-list" }, entry.items.map(renderItemRow))
         : el("p", { class: "empty-note", text: "Nothing captured yet." }),
     );
+  }
 
-    return el("div", { class: "company-card" }, children);
+  // ---- Add company ----
+
+  function renderAddRow(leftContainer) {
+    const status = el("div", { class: "status" });
+    const nameInput = el("input", { name: "company", type: "text", placeholder: "Company name" });
+    const extraInput = el("input", { name: "extra", type: "text", placeholder: "Extra keywords (optional, to disambiguate a common name)" });
+    const addBtn = el("button", {
+      text: "Add",
+      onclick: async () => {
+        const company = nameInput.value.trim();
+        if (!company) return;
+        addBtn.disabled = true;
+        status.className = "status";
+        status.textContent = "Checking for news coverage…";
+        const result = await postAction({ action: "add_company", company, extra_keywords: extraInput.value.trim() });
+        if (result.ok) {
+          companies.push(result.data.company);
+          selectedFeedId = result.data.company.feed_id;
+          nameInput.value = "";
+          extraInput.value = "";
+          status.textContent = "";
+          renderLeftList(leftContainer);
+          renderRightPane();
+        } else {
+          const labels = {
+            duplicate: "already on your list",
+            feed_check_failed: "couldn't verify a news feed for that — try adding extra keywords",
+            empty_company: "enter a company name",
+          };
+          status.className = "status error";
+          status.textContent = labels[result.error] || `Something went wrong (${result.error}).`;
+        }
+        addBtn.disabled = false;
+      },
+    });
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addBtn.click();
+    });
+    extraInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addBtn.click();
+    });
+
+    return el("div", { id: "add-row" }, [
+      el("div", { class: "add-inputs" }, [nameInput, extraInput, addBtn]),
+      status,
+    ]);
   }
 
   function renderError(message) {
@@ -202,30 +405,22 @@
       return;
     }
 
-    const onToggle = async (feedId, active) => {
-      try {
-        const headers = await authHeaders();
-        if (!headers) {
-          renderLogin();
-          return false;
-        }
-        const res = await fetch(API_BASE, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...headers },
-          body: JSON.stringify({ action: "toggle_company", feed_id: feedId, active }),
-        });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    };
+    companies = data.companies ?? [];
+    if (!selectedFeedId && companies.length) selectedFeedId = companies[0].feed_id;
 
     app.innerHTML = "";
+    const leftList = el("div", { id: "left-pane-list" });
+    const leftPane = el("div", { id: "left-pane" }, [renderAddRow(leftList), leftList]);
+    const rightPane = el("div", { id: "right-pane" });
+
     app.append(
       el("div", { id: "topbar" }, [el("h2", { text: "Company news" }), signOutBtn]),
-      el("p", { class: "hint", text: "Recent coverage per company, from a Google News search run for each — uncheck one to stop watching it (past items stay)." }),
-      el("div", { id: "grid" }, (data.companies ?? []).map((entry) => renderCompanyCard(entry, onToggle))),
+      el("p", { class: "hint", text: "Recent coverage per company, from a Bing News search run for each. Drag to reorder, click a company to see its coverage." }),
+      el("div", { id: "layout" }, [leftPane, rightPane]),
     );
+
+    renderLeftList(leftList);
+    renderRightPane();
   }
 
   renderApp();
