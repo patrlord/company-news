@@ -63,6 +63,14 @@
   .key-events ul { margin: 0; padding-left: 18px; }
   .key-events li { font-size: 13.5px; line-height: 1.5; margin-bottom: 5px; }
   .key-events li:last-child { margin-bottom: 0; }
+
+  .pricing-box { border: 1px solid #eee; border-radius: 8px; padding: 12px 16px; margin: 14px 0; background: #fafafa; }
+  .pricing-box h4 { margin: 0 0 8px; font-size: 12.5px; color: #666; text-transform: uppercase; letter-spacing: 0.02em; }
+  .pricing-rows { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; }
+  .pricing-rows dt { font-size: 13px; color: #666; }
+  .pricing-rows dd { margin: 0; font-size: 13.5px; font-weight: 500; }
+  .pricing-note { font-size: 13px; color: #555; margin: 4px 0 0; }
+  .pricing-source { font-size: 11.5px; color: #999; margin: 8px 0 0; }
   .item-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
   .item-list li { border-top: 1px solid #f0f0f0; padding-top: 14px; }
   .item-list li:first-child { border-top: none; padding-top: 0; }
@@ -307,6 +315,44 @@
     container.appendChild(listEl);
   }
 
+  // A one-time manual snapshot (collected via a live browser session, since
+  // Forge Global's real pricing data is Cloudflare-protected and not
+  // fetchable from a server-side function) — refreshed only on request, not
+  // polled. Omit the box entirely when no source was ever found (most
+  // companies); still show it, with just the source + note, when Forge
+  // lists the company but publishes no price/valuation data.
+  function renderPricingBox(snapshot, updatedAt) {
+    if (!snapshot || !snapshot.source) return null;
+    const rows = [];
+    if (snapshot.forge_price) {
+      const change = snapshot.forge_price_change ? ` (${snapshot.forge_price_change})` : "";
+      rows.push(["Forge Price", `${snapshot.forge_price}${change}`]);
+    }
+    if (snapshot.implied_valuation) rows.push(["Implied valuation", snapshot.implied_valuation]);
+    if (snapshot.last_round) {
+      const r = snapshot.last_round;
+      rows.push([`Last round — ${r.round}, ${formatDate(r.date)}`, `${r.price_per_share}/share · ${r.post_money_valuation} post-money`]);
+    }
+    if (snapshot.last_known_valuation) {
+      const v = snapshot.last_known_valuation;
+      rows.push(["Last known valuation", `${v.amount} (${formatDate(v.as_of)})`]);
+    }
+
+    const children = [el("h4", { text: "Secondary pricing" })];
+    if (rows.length) {
+      children.push(el("dl", { class: "pricing-rows" }, rows.flatMap(([label, value]) => [
+        el("dt", { text: label }),
+        el("dd", { text: value }),
+      ])));
+    }
+    if (snapshot.note) children.push(el("p", { class: "pricing-note", text: snapshot.note }));
+    children.push(el("p", {
+      class: "pricing-source",
+      text: `Source: ${snapshot.source}${updatedAt ? ` · as of ${formatDate(updatedAt)}` : ""}`,
+    }));
+    return el("div", { class: "pricing-box" }, children);
+  }
+
   // ---- Right pane: selected company's items ----
 
   function renderRightPane() {
@@ -350,6 +396,8 @@
         text: `Last check failed${entry.last_poll_error ? `: ${entry.last_poll_error}` : ""}`,
       }));
     }
+    const pricingBox = renderPricingBox(entry.pricing_snapshot, entry.pricing_updated_at);
+    if (pricingBox) container.append(pricingBox);
     if (entry.key_events && entry.key_events.length) {
       container.append(el("div", { class: "key-events" }, [
         el("h4", { text: "Key events — last 6 months" }),
