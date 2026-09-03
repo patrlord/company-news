@@ -102,11 +102,13 @@
                   line-height: 1; padding: 2.5px 5px; border-radius: 4px; flex-shrink: 0; white-space: nowrap; }
   .item-meta { font-size: 12px; color: #888; margin-top: 3px; }
   .item-summary { font-size: 13px; color: #555; margin-top: 5px; line-height: 1.45; }
+  .highlight-name { font-weight: 700; color: #0b3d91; background: #e8f0fe; padding: 0 4px;
+                     border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
   .empty-note { font-size: 13px; color: #999; }
   .no-selection { color: #999; font-size: 14px; padding-top: 8px; }
   .denied { max-width: 420px; }
 
-  #competitor-pane h3 { margin: 0 0 8px; font-size: 15px; }
+  .pane-title { margin: 0 0 8px; font-size: 17px; flex-shrink: 0; }
   .competitor-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .competitor-tag { display: inline-flex; align-items: center; gap: 4px; background: #eef2f7; color: #333;
                      font-size: 12.5px; padding: 4px 4px 4px 10px; border-radius: 14px; }
@@ -154,7 +156,11 @@
   const PANE_WIDTHS_KEY = "company-news-pane-widths";
   const DEFAULT_PANE_WIDTHS = { left: 300, competitor: 280 };
   const PANE_MIN_WIDTH = 200;
-  const PANE_MAX_WIDTH = 560;
+  // Matches #right-pane's own CSS min-width — the real constraint on how far
+  // a fixed-width pane can grow isn't a fixed number, it's "however much
+  // space is left once the other panes have taken their share."
+  const RIGHT_PANE_MIN_WIDTH = 240;
+  const DIVIDER_WIDTH = 17;
 
   function loadPaneWidths() {
     try {
@@ -213,8 +219,19 @@
     return divider;
   }
 
-  function clampPaneWidth(px) {
-    return Math.min(PANE_MAX_WIDTH, Math.max(PANE_MIN_WIDTH, px));
+  function clampPaneWidth(px, maxPx) {
+    return Math.min(maxPx, Math.max(PANE_MIN_WIDTH, px));
+  }
+
+  // How far a fixed-width pane can grow: whatever's left of #layout's real
+  // width once the OTHER fixed pane, both dividers, and the right pane's own
+  // minimum are accounted for — not an arbitrary constant, so it scales with
+  // the actual browser window instead of stopping short on a wide monitor.
+  function maxPaneWidth(otherFixedWidth) {
+    const layout = document.getElementById("layout");
+    const available = (layout ? layout.clientWidth : window.innerWidth) -
+      otherFixedWidth - DIVIDER_WIDTH * 2 - RIGHT_PANE_MIN_WIDTH;
+    return Math.max(PANE_MIN_WIDTH, available);
   }
 
   async function postAction(payload) {
@@ -246,7 +263,30 @@
     return (source || "").replace(/^www\./, "");
   }
 
-  function renderItemRow(item) {
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // Builds `tag` with `text` as its content, except any (case-insensitive)
+  // occurrence of one of `names` is wrapped in a bold, light-blue-boxed
+  // span — used to make it obvious at a glance where a tracked company or
+  // competitor is actually mentioned in a block of prose.
+  function renderHighlightedText(tag, text, names, extraProps = {}) {
+    const validNames = (names || []).filter(Boolean);
+    if (!validNames.length || !text) return el(tag, { ...extraProps, text: text || "" });
+
+    const pattern = validNames.map(escapeRegExp).join("|");
+    const regex = new RegExp(`(${pattern})`, "gi");
+    const parts = text.split(regex).filter((part) => part !== "");
+    const children = parts.map((part) =>
+      validNames.some((name) => name.toLowerCase() === part.toLowerCase())
+        ? el("span", { class: "highlight-name", text: part })
+        : document.createTextNode(part)
+    );
+    return el(tag, extraProps, children);
+  }
+
+  function renderItemRow(item, companyName) {
     const parts = [formatSource(item.source), formatDate(item.published_at || item.captured_at)].filter(Boolean);
     const titleRow = [
       item.url
@@ -258,7 +298,9 @@
       el("div", { class: "item-title-row" }, titleRow),
       el("div", { class: "item-meta", text: parts.join(" · ") }),
     ];
-    if (item.summary) children.push(el("div", { class: "item-summary", text: item.summary }));
+    if (item.summary) {
+      children.push(renderHighlightedText("div", item.summary, [companyName], { class: "item-summary" }));
+    }
     return el("li", {}, children);
   }
 
@@ -485,7 +527,7 @@
     }
     container.append(
       entry.items.length
-        ? el("ul", { class: "item-list" }, entry.items.map(renderItemRow))
+        ? el("ul", { class: "item-list" }, entry.items.map((item) => renderItemRow(item, entry.company)))
         : el("p", { class: "empty-note", text: "Nothing captured yet." }),
     );
   }
@@ -499,7 +541,7 @@
     const entry = companies.find((c) => c.feed_id === selectedFeedId);
     if (!entry) return;
 
-    container.append(el("h3", { text: "Competitors" }));
+    container.append(el("h3", { class: "pane-title", text: "Competitors" }));
 
     const tagsRow = el("div", { class: "competitor-tags" });
     for (const comp of entry.competitors) {
@@ -564,9 +606,10 @@
     }
 
     if (entry.competitor_summary && entry.competitor_summary.length) {
+      const competitorNames = entry.competitors.map((c) => c.name);
       container.append(el("div", { class: "key-events" }, [
         el("h4", { text: "Competitor news — last 6 months" }),
-        el("ul", {}, entry.competitor_summary.map((bullet) => el("li", { text: bullet }))),
+        el("ul", {}, entry.competitor_summary.map((bullet) => renderHighlightedText("li", bullet, competitorNames))),
       ]));
     } else {
       container.append(el("p", { class: "empty-note", text: "Collecting news for these competitors — check back soon." }));
@@ -687,7 +730,11 @@
 
     app.innerHTML = "";
     const leftList = el("div", { id: "left-pane-list" });
-    const leftPane = el("div", { id: "left-pane" }, [renderAddRow(leftList), leftList]);
+    const leftPane = el("div", { id: "left-pane" }, [
+      el("h3", { class: "pane-title", text: "Companies to track" }),
+      renderAddRow(leftList),
+      leftList,
+    ]);
     const rightPane = el("div", { id: "right-pane" });
     const competitorPane = el("div", { id: "competitor-pane" });
 
@@ -697,14 +744,14 @@
     const leftDivider = makeDivider(
       () => paneWidths.left,
       (startWidth, deltaX) => {
-        paneWidths.left = clampPaneWidth(startWidth + deltaX);
+        paneWidths.left = clampPaneWidth(startWidth + deltaX, maxPaneWidth(paneWidths.competitor));
         leftPane.style.flexBasis = `${paneWidths.left}px`;
       },
     );
     const rightDivider = makeDivider(
       () => paneWidths.competitor,
       (startWidth, deltaX) => {
-        paneWidths.competitor = clampPaneWidth(startWidth - deltaX);
+        paneWidths.competitor = clampPaneWidth(startWidth - deltaX, maxPaneWidth(paneWidths.left));
         competitorPane.style.flexBasis = `${paneWidths.competitor}px`;
       },
     );
