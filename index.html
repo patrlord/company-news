@@ -7,8 +7,8 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <title>Company news</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1100px;
-         margin: 48px auto; padding: 0 24px; color: #1a1a1a; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+         margin: 36px 0; padding: 0 28px; color: #1a1a1a; box-sizing: border-box; }
   input { width: 100%; font: inherit; font-size: 14px; padding: 8px 10px;
           box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; }
   button { padding: 9px 16px; font-size: 14px; border: none;
@@ -24,20 +24,26 @@
                       padding: 10px 14px; margin: 4px 0 16px; font-size: 13.5px; color: #6b4a00; }
   .reminder-banner button { flex-shrink: 0; padding: 6px 14px; font-size: 12.5px; }
 
-  #layout { display: flex; gap: 24px; align-items: flex-start; }
-  #left-pane { flex: 0 0 300px; min-width: 0;
+  #layout { display: flex; align-items: flex-start; width: 100%; }
+  #left-pane { flex: 0 0 auto; min-width: 0;
                position: sticky; top: 24px; max-height: calc(100vh - 48px);
                display: flex; flex-direction: column; }
-  #right-pane { flex: 1; min-width: 0; }
-  #competitor-pane { flex: 0 0 280px; min-width: 0; }
-  @media (max-width: 960px) {
-    #competitor-pane { flex-basis: 240px; }
-  }
+  #right-pane { flex: 1 1 0%; min-width: 240px; }
+  #competitor-pane { flex: 0 0 auto; min-width: 0; }
+
+  .pane-divider { flex: 0 0 17px; align-self: stretch; cursor: col-resize;
+                   position: relative; touch-action: none; }
+  .pane-divider::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0;
+                          width: 1px; background: #e5e5e5; transform: translateX(-50%); }
+  .pane-divider:hover::after, .pane-divider.dragging::after { width: 2px; background: #1a73e8; }
+
   @media (max-width: 720px) {
     #layout { flex-direction: column; }
-    #left-pane { flex: 1; width: 100%; position: static; max-height: none; }
+    .pane-divider { display: none; }
+    #left-pane { flex-basis: auto !important; width: 100%; position: static; max-height: none; }
     #left-pane-list { overflow-y: visible !important; }
-    #competitor-pane { flex: 1; width: 100%; }
+    #right-pane { min-width: 0; }
+    #competitor-pane { flex-basis: auto !important; width: 100%; }
   }
 
   #add-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; flex-shrink: 0; }
@@ -139,6 +145,71 @@
     }
     for (const child of children) node.appendChild(child);
     return node;
+  }
+
+  // ---- Resizable panes ----
+  // Widths are a per-viewer convenience only — stored in localStorage, never
+  // sent to the server. A private window or a different browser just falls
+  // back to the defaults below, which is fine.
+  const PANE_WIDTHS_KEY = "company-news-pane-widths";
+  const DEFAULT_PANE_WIDTHS = { left: 300, competitor: 280 };
+  const PANE_MIN_WIDTH = 200;
+  const PANE_MAX_WIDTH = 560;
+
+  function loadPaneWidths() {
+    try {
+      const raw = localStorage.getItem(PANE_WIDTHS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return { ...DEFAULT_PANE_WIDTHS, ...parsed };
+      }
+    } catch {
+      // Private window, storage disabled, or corrupt value — defaults below.
+    }
+    return { ...DEFAULT_PANE_WIDTHS };
+  }
+
+  function savePaneWidths() {
+    try {
+      localStorage.setItem(PANE_WIDTHS_KEY, JSON.stringify(paneWidths));
+    } catch {
+      // Not essential — the resize itself already applied, just won't persist.
+    }
+  }
+
+  const paneWidths = loadPaneWidths();
+
+  // A divider between two fixed-width flex siblings. `onDrag(deltaX)` gets
+  // the raw pointer movement each frame and is responsible for updating
+  // paneWidths + the pane element's own style — kept generic so the same
+  // function drives both dividers with opposite sign conventions.
+  function makeDivider(onDrag) {
+    const divider = el("div", { class: "pane-divider" });
+    divider.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      divider.classList.add("dragging");
+      const prevUserSelect = document.body.style.userSelect;
+      document.body.style.userSelect = "none";
+
+      function onMove(moveEvent) {
+        onDrag(moveEvent.clientX - startX);
+      }
+      function onUp() {
+        divider.classList.remove("dragging");
+        document.body.style.userSelect = prevUserSelect;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        savePaneWidths();
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+    return divider;
+  }
+
+  function clampPaneWidth(px) {
+    return Math.min(PANE_MAX_WIDTH, Math.max(PANE_MIN_WIDTH, px));
   }
 
   async function postAction(payload) {
@@ -615,6 +686,18 @@
     const rightPane = el("div", { id: "right-pane" });
     const competitorPane = el("div", { id: "competitor-pane" });
 
+    leftPane.style.flexBasis = `${paneWidths.left}px`;
+    competitorPane.style.flexBasis = `${paneWidths.competitor}px`;
+
+    const leftDivider = makeDivider((deltaX) => {
+      paneWidths.left = clampPaneWidth(paneWidths.left + deltaX);
+      leftPane.style.flexBasis = `${paneWidths.left}px`;
+    });
+    const rightDivider = makeDivider((deltaX) => {
+      paneWidths.competitor = clampPaneWidth(paneWidths.competitor - deltaX);
+      competitorPane.style.flexBasis = `${paneWidths.competitor}px`;
+    });
+
     app.append(
       el("div", { id: "topbar" }, [
         el("h2", { text: "Company news" }),
@@ -623,7 +706,7 @@
       el("p", { class: "hint", text: "Recent coverage per company, from a Bing News search run for each. Drag to reorder, click a company to see its coverage." }),
     );
     if (data.show_pricing_reminder) app.append(renderReminderBanner());
-    app.append(el("div", { id: "layout" }, [leftPane, rightPane, competitorPane]));
+    app.append(el("div", { id: "layout" }, [leftPane, leftDivider, rightPane, rightDivider, competitorPane]));
 
     renderLeftList(leftList);
     renderPanes();
