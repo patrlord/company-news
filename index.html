@@ -17,10 +17,12 @@
   .hint { color: #666; font-size: 13px; }
   .status { margin-top: 8px; font-size: 13px; min-height: 1.2em; color: #666; }
   .status.error { color: #b3261e; }
-  #login-row { display: flex; flex-direction: column; gap: 8px; max-width: 320px; }
   #topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
-  #signout { background: none; color: #666; padding: 4px 0; font-size: 13px;
-             text-decoration: underline; }
+
+  .reminder-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+                      background: #fff6e5; border: 1px solid #f0c368; border-radius: 8px;
+                      padding: 10px 14px; margin: 4px 0 16px; font-size: 13.5px; color: #6b4a00; }
+  .reminder-banner button { flex-shrink: 0; padding: 6px 14px; font-size: 12.5px; }
 
   #layout { display: flex; gap: 24px; align-items: flex-start; }
   #left-pane { flex: 0 0 300px; min-width: 0;
@@ -51,8 +53,8 @@
   .drag-handle { color: #bbb; font-size: 13px; cursor: grab; flex-shrink: 0; padding: 0 2px; user-select: none; }
   .watching-checkbox { width: auto; flex-shrink: 0; }
   .company-name { flex: 1; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .recent-badge { background: #1a73e8; color: white; font-size: 11px; font-weight: 600;
-                   line-height: 1; padding: 3px 6px; border-radius: 4px; flex-shrink: 0; }
+  .new-badge { background: #1a73e8; color: white; font-size: 11px; font-weight: 600;
+               line-height: 1; padding: 3px 6px; border-radius: 4px; flex-shrink: 0; }
   .remove-btn { background: none; color: #bbb; font-size: 15px; line-height: 1; padding: 2px 4px;
                 border-radius: 4px; flex-shrink: 0; }
   .remove-btn:hover { color: #b3261e; background: #fdecea; }
@@ -76,31 +78,36 @@
   .pricing-rows dd { margin: 0; font-size: 13.5px; font-weight: 500; }
   .pricing-note { font-size: 13px; color: #555; margin: 4px 0 0; }
   .pricing-source { font-size: 11.5px; color: #999; margin: 8px 0 0; }
+  .price-up { color: #1a7a3c; }
+  .price-down { color: #b3261e; }
+
   .item-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
   .item-list li { border-top: 1px solid #f0f0f0; padding-top: 14px; }
   .item-list li:first-child { border-top: none; padding-top: 0; }
   .item-title-row { display: flex; align-items: baseline; gap: 7px; }
   .item-title { font-size: 14.5px; font-weight: 500; color: #1a1a1a; text-decoration: none; line-height: 1.4; }
   .item-title:hover { text-decoration: underline; }
-  .item-recent-tag { background: #1a73e8; color: white; font-size: 10px; font-weight: 600;
-                      line-height: 1; padding: 2.5px 5px; border-radius: 4px; flex-shrink: 0; white-space: nowrap; }
+  .item-new-tag { background: #1a73e8; color: white; font-size: 10px; font-weight: 600;
+                  line-height: 1; padding: 2.5px 5px; border-radius: 4px; flex-shrink: 0; white-space: nowrap; }
   .item-meta { font-size: 12px; color: #888; margin-top: 3px; }
   .item-summary { font-size: 13px; color: #555; margin-top: 5px; line-height: 1.45; }
   .empty-note { font-size: 13px; color: #999; }
   .no-selection { color: #999; font-size: 14px; padding-top: 8px; }
+  .denied { max-width: 420px; }
 </style>
 </head>
 <body>
 <div id="app"><p>Loading…</p></div>
 <script type="module">
-  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
   const SUPABASE_URL = "https://eyejmvryyiaymrlenhxa.supabase.co";
-  const PUBLISHABLE_KEY = "sb_publishable_QI6BiGiDmlBZwpA_TAq8Qg_uDjoKKKv";
   const API_BASE = `${SUPABASE_URL}/functions/v1/company-news`;
 
-  const supabase = createClient(SUPABASE_URL, PUBLISHABLE_KEY);
   const app = document.getElementById("app");
+
+  // No login on this page — access is a fixed named token in the URL
+  // (?user=patrick), checked server-side against a small fixed roster.
+  // Read once at load; every request carries it.
+  const currentUser = new URLSearchParams(location.search).get("user");
 
   // In-memory page state — companies (in display order) and which one is
   // shown in the right pane.
@@ -118,60 +125,12 @@
     return node;
   }
 
-  function renderLogin() {
-    app.innerHTML = "";
-    const status = el("div", { class: "status" });
-    const emailInput = el("input", { type: "email", placeholder: "Email", autocomplete: "username" });
-    const passwordInput = el("input", { type: "password", placeholder: "Password", autocomplete: "current-password" });
-    const signInBtn = el("button", {
-      text: "Sign in",
-      onclick: async () => {
-        signInBtn.disabled = true;
-        status.className = "status";
-        status.textContent = "Signing in…";
-        const { error } = await supabase.auth.signInWithPassword({
-          email: emailInput.value.trim(),
-          password: passwordInput.value,
-        });
-        if (error) {
-          status.className = "status error";
-          status.textContent = error.message;
-          signInBtn.disabled = false;
-          return;
-        }
-        renderApp();
-      },
-    });
-    passwordInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") signInBtn.click();
-    });
-
-    app.append(
-      el("h2", { text: "Company news" }),
-      el("p", { class: "hint", text: "Sign in with your Personal OS account." }),
-      el("div", { id: "login-row" }, [emailInput, passwordInput, signInBtn]),
-      status,
-    );
-  }
-
-  // Re-fetches the session right before each request rather than reusing a
-  // variable closed over earlier — supabase-js refreshes the token in the
-  // background, but a stale closure keeps sending an expired JWT and getting
-  // 401s until the page is reloaded (same fix as the ask/usage pages).
-  async function authHeaders() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-    return { Authorization: `Bearer ${session.access_token}`, apikey: PUBLISHABLE_KEY };
-  }
-
   async function postAction(payload) {
-    const headers = await authHeaders();
-    if (!headers) return { ok: false, error: "not_signed_in" };
     try {
       const res = await fetch(API_BASE, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...headers },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, user: currentUser }),
       });
       let data;
       try {
@@ -202,7 +161,7 @@
         ? el("a", { class: "item-title", href: item.url, target: "_blank", rel: "noopener noreferrer", text: item.title || "Untitled" })
         : el("div", { class: "item-title", text: item.title || "Untitled" }),
     ];
-    if (item.recent) titleRow.push(el("span", { class: "item-recent-tag", text: "RECENT" }));
+    if (item.new) titleRow.push(el("span", { class: "item-new-tag", text: "NEW" }));
     const children = [
       el("div", { class: "item-title-row" }, titleRow),
       el("div", { class: "item-meta", text: parts.join(" · ") }),
@@ -310,8 +269,8 @@
         watchCheckbox,
         el("span", { class: "company-name", text: entry.company }),
       ];
-      if (entry.recent_count > 0) {
-        rowChildren.push(el("span", { class: "recent-badge", title: "Items from the last 7 days", text: `${entry.recent_count} recent` }));
+      if (entry.new_count > 0) {
+        rowChildren.push(el("span", { class: "new-badge", title: "Items collected since your last visit", text: `${entry.new_count} new` }));
       }
       rowChildren.push(removeBtn);
       li.append(...rowChildren);
@@ -343,7 +302,7 @@
       rows.push(["Last known valuation", `${v.amount} (${formatDate(v.as_of)})`]);
     }
 
-    const children = [el("h4", { text: "Secondary pricing" })];
+    const children = [el("h4", { text: "Secondary pricing (private market)" })];
     if (rows.length) {
       children.push(el("dl", { class: "pricing-rows" }, rows.flatMap(([label, value]) => [
         el("dt", { text: label }),
@@ -356,6 +315,27 @@
       text: `Source: ${snapshot.source}${updatedAt ? ` · as of ${formatDate(updatedAt)}` : ""}`,
     }));
     return el("div", { class: "pricing-box" }, children);
+  }
+
+  // Live quote, automatically refreshed hourly by a cron job — only present
+  // for the (few) tracked companies that have since IPO'd.
+  function renderPublicPriceBox(ticker, snapshot, updatedAt) {
+    if (!ticker || !snapshot || typeof snapshot.price !== "number") return null;
+    const changeClass = typeof snapshot.change_percent === "number"
+      ? (snapshot.change_percent >= 0 ? "price-up" : "price-down")
+      : "";
+    const changeText = typeof snapshot.change_percent === "number"
+      ? ` (${snapshot.change_percent >= 0 ? "+" : ""}${snapshot.change_percent.toFixed(2)}%)`
+      : "";
+    const priceDd = el("dd", { class: changeClass }, [
+      document.createTextNode(`${snapshot.currency || "USD"} ${snapshot.price.toFixed(2)}${changeText}`),
+    ]);
+    const rows = [el("dt", { text: `${ticker} — public market price` }), priceDd];
+    return el("div", { class: "pricing-box" }, [
+      el("h4", { text: "Public market price" }),
+      el("dl", { class: "pricing-rows" }, rows),
+      el("p", { class: "pricing-source", text: `Source: Yahoo Finance${updatedAt ? ` · as of ${formatDate(updatedAt)}` : ""}` }),
+    ]);
   }
 
   // ---- Right pane: selected company's items ----
@@ -401,6 +381,8 @@
         text: `Last check failed${entry.last_poll_error ? `: ${entry.last_poll_error}` : ""}`,
       }));
     }
+    const publicPriceBox = renderPublicPriceBox(entry.public_ticker, entry.public_price_snapshot, entry.public_price_updated_at);
+    if (publicPriceBox) container.append(publicPriceBox);
     const pricingBox = renderPricingBox(entry.pricing_snapshot, entry.pricing_updated_at);
     if (pricingBox) container.append(pricingBox);
     if (entry.key_events && entry.key_events.length) {
@@ -464,36 +446,50 @@
     ]);
   }
 
+  // ---- Pricing reminder banner ----
+
+  function renderReminderBanner() {
+    const banner = el("div", { class: "reminder-banner" }, [
+      el("span", { text: "Remember to update secondary prices" }),
+      el("button", {
+        text: "Done",
+        onclick: async (e) => {
+          e.target.disabled = true;
+          const result = await postAction({ action: "dismiss_pricing_reminder" });
+          if (result.ok) banner.remove();
+          else e.target.disabled = false;
+        },
+      }),
+    ]);
+    return banner;
+  }
+
   function renderError(message) {
     app.innerHTML = "";
     app.appendChild(el("p", { text: message }));
   }
 
+  function renderDenied() {
+    app.innerHTML = "";
+    app.appendChild(el("div", { class: "denied" }, [
+      el("h2", { text: "Company news" }),
+      el("p", { class: "hint", text: "This link doesn't include a valid access token. Use the link you were given (it looks like ?user=<your name> at the end of the URL)." }),
+    ]));
+  }
+
   async function renderApp() {
     app.innerHTML = "<p>Loading…</p>";
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      renderLogin();
+    if (!currentUser) {
+      renderDenied();
       return;
     }
 
-    const signOutBtn = el("button", {
-      id: "signout",
-      text: "Sign out",
-      onclick: async () => {
-        await supabase.auth.signOut();
-        renderLogin();
-      },
-    });
-
     let data;
     try {
-      const res = await fetch(API_BASE, {
-        headers: { Authorization: `Bearer ${session.access_token}`, apikey: PUBLISHABLE_KEY },
-      });
+      const res = await fetch(`${API_BASE}?user=${encodeURIComponent(currentUser)}`);
       if (res.status === 401) {
-        renderLogin();
+        renderDenied();
         return;
       }
       data = await res.json();
@@ -512,10 +508,14 @@
     const rightPane = el("div", { id: "right-pane" });
 
     app.append(
-      el("div", { id: "topbar" }, [el("h2", { text: "Company news" }), signOutBtn]),
+      el("div", { id: "topbar" }, [
+        el("h2", { text: "Company news" }),
+        el("span", { class: "hint", text: data.display_name ? `Viewing as ${data.display_name}` : "" }),
+      ]),
       el("p", { class: "hint", text: "Recent coverage per company, from a Bing News search run for each. Drag to reorder, click a company to see its coverage." }),
-      el("div", { id: "layout" }, [leftPane, rightPane]),
     );
+    if (data.show_pricing_reminder) app.append(renderReminderBanner());
+    app.append(el("div", { id: "layout" }, [leftPane, rightPane]));
 
     renderLeftList(leftList);
     renderRightPane();
