@@ -572,22 +572,24 @@
         if (!name) return;
         addBtn.disabled = true;
         status.className = "status";
-        status.textContent = "Checking for news coverage…";
+        // The backend now chains collection, enrichment, and re-summarizing
+        // before responding, so this can take a while — the page refreshes
+        // straight into the finished result once it's done, rather than
+        // showing a stale "no news yet" state the user would have to
+        // manually reload past.
+        status.textContent = "Collecting and summarizing news for this competitor — this can take a bit…";
         const result = await postAction({ action: "add_competitor", company_feed_id: entry.feed_id, competitor_name: name });
         if (result.ok) {
-          entry.competitors.push(result.data.competitor);
-          nameInput.value = "";
-          status.textContent = "";
-          renderCompetitorPane();
-        } else {
-          const labels = {
-            duplicate: "already added",
-            feed_check_failed: "couldn't verify a news feed for that",
-            missing_fields: "enter a competitor name",
-          };
-          status.className = "status error";
-          status.textContent = labels[result.error] || `Something went wrong (${result.error}).`;
+          await renderApp();
+          return;
         }
+        const labels = {
+          duplicate: "already added",
+          feed_check_failed: "couldn't verify a news feed for that",
+          missing_fields: "enter a competitor name",
+        };
+        status.className = "status error";
+        status.textContent = labels[result.error] || `Something went wrong (${result.error}).`;
         addBtn.disabled = false;
       },
     });
