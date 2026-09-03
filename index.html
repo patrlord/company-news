@@ -179,21 +179,26 @@
 
   const paneWidths = loadPaneWidths();
 
-  // A divider between two fixed-width flex siblings. `onDrag(deltaX)` gets
-  // the raw pointer movement each frame and is responsible for updating
-  // paneWidths + the pane element's own style — kept generic so the same
+  // A divider between two fixed-width flex siblings. `getWidth()` captures
+  // the pane's width once at drag start; `applyWidth(startWidth, deltaX)`
+  // is called on every mousemove with that SAME startWidth plus the total
+  // offset from the drag's own starting point — never a running total — so
+  // the pane always tracks the pointer 1:1 instead of compounding a little
+  // extra on every single mousemove tick (which made it drift ahead of the
+  // cursor, faster the longer the drag ran). Kept generic so the same
   // function drives both dividers with opposite sign conventions.
-  function makeDivider(onDrag) {
+  function makeDivider(getWidth, applyWidth) {
     const divider = el("div", { class: "pane-divider" });
     divider.addEventListener("mousedown", (e) => {
       e.preventDefault();
       const startX = e.clientX;
+      const startWidth = getWidth();
       divider.classList.add("dragging");
       const prevUserSelect = document.body.style.userSelect;
       document.body.style.userSelect = "none";
 
       function onMove(moveEvent) {
-        onDrag(moveEvent.clientX - startX);
+        applyWidth(startWidth, moveEvent.clientX - startX);
       }
       function onUp() {
         divider.classList.remove("dragging");
@@ -689,14 +694,20 @@
     leftPane.style.flexBasis = `${paneWidths.left}px`;
     competitorPane.style.flexBasis = `${paneWidths.competitor}px`;
 
-    const leftDivider = makeDivider((deltaX) => {
-      paneWidths.left = clampPaneWidth(paneWidths.left + deltaX);
-      leftPane.style.flexBasis = `${paneWidths.left}px`;
-    });
-    const rightDivider = makeDivider((deltaX) => {
-      paneWidths.competitor = clampPaneWidth(paneWidths.competitor - deltaX);
-      competitorPane.style.flexBasis = `${paneWidths.competitor}px`;
-    });
+    const leftDivider = makeDivider(
+      () => paneWidths.left,
+      (startWidth, deltaX) => {
+        paneWidths.left = clampPaneWidth(startWidth + deltaX);
+        leftPane.style.flexBasis = `${paneWidths.left}px`;
+      },
+    );
+    const rightDivider = makeDivider(
+      () => paneWidths.competitor,
+      (startWidth, deltaX) => {
+        paneWidths.competitor = clampPaneWidth(startWidth - deltaX);
+        competitorPane.style.flexBasis = `${paneWidths.competitor}px`;
+      },
+    );
 
     app.append(
       el("div", { id: "topbar" }, [
