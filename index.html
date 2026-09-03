@@ -29,10 +29,15 @@
                position: sticky; top: 24px; max-height: calc(100vh - 48px);
                display: flex; flex-direction: column; }
   #right-pane { flex: 1; min-width: 0; }
+  #competitor-pane { flex: 0 0 280px; min-width: 0; }
+  @media (max-width: 960px) {
+    #competitor-pane { flex-basis: 240px; }
+  }
   @media (max-width: 720px) {
     #layout { flex-direction: column; }
     #left-pane { flex: 1; width: 100%; position: static; max-height: none; }
     #left-pane-list { overflow-y: visible !important; }
+    #competitor-pane { flex: 1; width: 100%; }
   }
 
   #add-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; flex-shrink: 0; }
@@ -94,6 +99,17 @@
   .empty-note { font-size: 13px; color: #999; }
   .no-selection { color: #999; font-size: 14px; padding-top: 8px; }
   .denied { max-width: 420px; }
+
+  #competitor-pane h3 { margin: 0 0 8px; font-size: 15px; }
+  .competitor-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .competitor-tag { display: inline-flex; align-items: center; gap: 4px; background: #eef2f7; color: #333;
+                     font-size: 12.5px; padding: 4px 4px 4px 10px; border-radius: 14px; }
+  .competitor-tag button { background: none; color: #999; font-size: 13px; line-height: 1;
+                            padding: 2px 5px; border-radius: 50%; }
+  .competitor-tag button:hover { color: #b3261e; background: #fdecea; }
+  .competitor-add-row { display: flex; gap: 6px; margin-bottom: 4px; }
+  .competitor-add-row input { font-size: 13px; padding: 6px 8px; }
+  .competitor-add-row button { padding: 6px 10px; font-size: 12.5px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -188,7 +204,7 @@
         onclick: () => {
           selectedFeedId = entry.feed_id;
           renderLeftList(container);
-          renderRightPane();
+          renderPanes();
         },
         ondragstart: (e) => {
           dragFromIndex = index;
@@ -260,7 +276,7 @@
             selectedFeedId = companies[0]?.feed_id ?? null;
           }
           renderLeftList(container);
-          renderRightPane();
+          renderPanes();
         },
       });
 
@@ -398,6 +414,97 @@
     );
   }
 
+  // ---- Third pane: competitors of the selected company ----
+
+  function renderCompetitorPane() {
+    const container = document.getElementById("competitor-pane");
+    container.innerHTML = "";
+
+    const entry = companies.find((c) => c.feed_id === selectedFeedId);
+    if (!entry) return;
+
+    container.append(el("h3", { text: "Competitors" }));
+
+    const tagsRow = el("div", { class: "competitor-tags" });
+    for (const comp of entry.competitors) {
+      const removeBtn = el("button", {
+        text: "×",
+        title: `Remove ${comp.name}`,
+        onclick: async () => {
+          removeBtn.disabled = true;
+          const result = await postAction({ action: "remove_competitor", feed_id: comp.feed_id });
+          if (result.ok) {
+            entry.competitors = entry.competitors.filter((c) => c.feed_id !== comp.feed_id);
+            renderCompetitorPane();
+          } else {
+            removeBtn.disabled = false;
+          }
+        },
+      });
+      tagsRow.append(el("span", { class: "competitor-tag" }, [document.createTextNode(comp.name), removeBtn]));
+    }
+    container.append(tagsRow);
+
+    const status = el("div", { class: "status" });
+    const nameInput = el("input", { type: "text", placeholder: "Competitor name" });
+    const addBtn = el("button", {
+      text: "+ Add",
+      onclick: async () => {
+        const name = nameInput.value.trim();
+        if (!name) return;
+        addBtn.disabled = true;
+        status.className = "status";
+        status.textContent = "Checking for news coverage…";
+        const result = await postAction({ action: "add_competitor", company_feed_id: entry.feed_id, competitor_name: name });
+        if (result.ok) {
+          entry.competitors.push(result.data.competitor);
+          nameInput.value = "";
+          status.textContent = "";
+          renderCompetitorPane();
+        } else {
+          const labels = {
+            duplicate: "already added",
+            feed_check_failed: "couldn't verify a news feed for that",
+            missing_fields: "enter a competitor name",
+          };
+          status.className = "status error";
+          status.textContent = labels[result.error] || `Something went wrong (${result.error}).`;
+        }
+        addBtn.disabled = false;
+      },
+    });
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addBtn.click();
+    });
+
+    container.append(
+      el("div", { class: "competitor-add-row" }, [nameInput, addBtn]),
+      status,
+    );
+
+    if (entry.competitors.length === 0) {
+      container.append(el("p", { class: "empty-note", text: "Add competitors above to see their news here." }));
+      return;
+    }
+
+    if (entry.competitor_summary && entry.competitor_summary.length) {
+      container.append(el("div", { class: "key-events" }, [
+        el("h4", { text: "Competitor news — last 6 months" }),
+        el("ul", {}, entry.competitor_summary.map((bullet) => el("li", { text: bullet }))),
+      ]));
+    } else {
+      container.append(el("p", { class: "empty-note", text: "Collecting news for these competitors — check back soon." }));
+    }
+  }
+
+  // Selection or company-list changes affect both the right pane and the
+  // competitor pane — call this instead of renderRightPane() directly
+  // whenever the selected company (or its list membership) changes.
+  function renderPanes() {
+    renderRightPane();
+    renderCompetitorPane();
+  }
+
   // ---- Add company ----
 
   function renderAddRow(leftContainer) {
@@ -420,7 +527,7 @@
           extraInput.value = "";
           status.textContent = "";
           renderLeftList(leftContainer);
-          renderRightPane();
+          renderPanes();
         } else {
           const labels = {
             duplicate: "already on your list",
@@ -506,6 +613,7 @@
     const leftList = el("div", { id: "left-pane-list" });
     const leftPane = el("div", { id: "left-pane" }, [renderAddRow(leftList), leftList]);
     const rightPane = el("div", { id: "right-pane" });
+    const competitorPane = el("div", { id: "competitor-pane" });
 
     app.append(
       el("div", { id: "topbar" }, [
@@ -515,10 +623,10 @@
       el("p", { class: "hint", text: "Recent coverage per company, from a Bing News search run for each. Drag to reorder, click a company to see its coverage." }),
     );
     if (data.show_pricing_reminder) app.append(renderReminderBanner());
-    app.append(el("div", { id: "layout" }, [leftPane, rightPane]));
+    app.append(el("div", { id: "layout" }, [leftPane, rightPane, competitorPane]));
 
     renderLeftList(leftList);
-    renderRightPane();
+    renderPanes();
   }
 
   renderApp();
