@@ -522,7 +522,7 @@
     if (entry.key_events && entry.key_events.length) {
       container.append(el("div", { class: "key-events" }, [
         el("h4", { text: "Key events — last 6 months" }),
-        el("ul", {}, entry.key_events.map((bullet) => el("li", { text: bullet }))),
+        el("ul", {}, entry.key_events.map((bullet) => renderHighlightedText("li", bullet, [entry.company]))),
       ]));
     }
     container.append(
