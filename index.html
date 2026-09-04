@@ -93,8 +93,15 @@
   .price-down { color: #b3261e; }
 
   .item-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-  .item-list li { border-top: 1px solid #f0f0f0; padding-top: 14px; }
+  .item-list li { border-top: 1px solid #f0f0f0; padding-top: 14px; padding-right: 26px; position: relative; }
   .item-list li:first-child { border-top: none; padding-top: 0; }
+  .item-dismiss-btn { position: absolute; top: 14px; right: 0; width: 20px; height: 20px;
+                       display: flex; align-items: center; justify-content: center;
+                       background: #fdecea; color: #b3261e; border: none; border-radius: 5px;
+                       font-size: 13px; line-height: 1; padding: 0; cursor: pointer; }
+  .item-list li:first-child .item-dismiss-btn { top: 0; }
+  .item-dismiss-btn:hover { background: #f7cac4; }
+  .item-dismiss-btn:disabled { opacity: 0.5; cursor: default; }
   .item-title-row { display: flex; align-items: baseline; gap: 7px; }
   .item-title { font-size: 14.5px; font-weight: 500; color: #1a1a1a; text-decoration: none; line-height: 1.4; }
   .item-title:hover { text-decoration: underline; }
@@ -286,7 +293,7 @@
     return el(tag, extraProps, children);
   }
 
-  function renderItemRow(item, companyName) {
+  function renderItemRow(item, companyName, onDismiss) {
     const parts = [formatSource(item.source), formatDate(item.published_at || item.captured_at)].filter(Boolean);
     const titleRow = [
       item.url
@@ -301,6 +308,17 @@
     if (item.summary) {
       children.push(renderHighlightedText("div", item.summary, [companyName], { class: "item-summary" }));
     }
+    const dismissBtn = el("button", {
+      class: "item-dismiss-btn",
+      text: "×",
+      title: "Not relevant — remove",
+      onclick: async () => {
+        dismissBtn.disabled = true;
+        const kept = await onDismiss();
+        if (kept === false) dismissBtn.disabled = false;
+      },
+    });
+    children.push(dismissBtn);
     return el("li", {}, children);
   }
 
@@ -527,7 +545,13 @@
     }
     container.append(
       entry.items.length
-        ? el("ul", { class: "item-list" }, entry.items.map((item) => renderItemRow(item, entry.company)))
+        ? el("ul", { class: "item-list" }, entry.items.map((item) => renderItemRow(item, entry.company, async () => {
+            const result = await postAction({ action: "dismiss_item", item_id: item.id });
+            if (!result.ok) return false;
+            entry.items = entry.items.filter((it) => it.id !== item.id);
+            renderRightPane();
+            return true;
+          })))
         : el("p", { class: "empty-note", text: "Nothing captured yet." }),
     );
   }
