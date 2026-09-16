@@ -89,6 +89,8 @@
   .pricing-rows dd { margin: 0; font-size: 13.5px; font-weight: 500; }
   .pricing-note { font-size: 13px; color: #555; margin: 4px 0 0; }
   .pricing-source { font-size: 11.5px; color: #999; margin: 8px 0 0; }
+  .pricing-source a { color: #888; text-decoration: underline; }
+  .pricing-source a:hover { color: #1a73e8; }
   .price-up { color: #1a7a3c; }
   .price-down { color: #b3261e; }
 
@@ -462,10 +464,11 @@
       ])));
     }
     if (snapshot.note) children.push(el("p", { class: "pricing-note", text: snapshot.note }));
-    children.push(el("p", {
-      class: "pricing-source",
-      text: `Source: ${snapshot.source}${updatedAt ? ` · as of ${formatDate(updatedAt)}` : ""}`,
-    }));
+    const sourceChildren = snapshot.source_url
+      ? [el("a", { href: snapshot.source_url, target: "_blank", rel: "noopener noreferrer", text: snapshot.source })]
+      : [document.createTextNode(snapshot.source)];
+    if (updatedAt) sourceChildren.push(document.createTextNode(` · as of ${formatDate(updatedAt)}`));
+    children.push(el("p", { class: "pricing-source" }, [document.createTextNode("Source: "), ...sourceChildren]));
     return el("div", { class: "pricing-box" }, children);
   }
 
@@ -483,10 +486,16 @@
       document.createTextNode(`${snapshot.currency || "USD"} ${snapshot.price.toFixed(2)}${changeText}`),
     ]);
     const rows = [el("dt", { text: `${ticker} — public market price` }), priceDd];
+    const yahooUrl = `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`;
+    const sourceChildren = [
+      document.createTextNode("Source: "),
+      el("a", { href: yahooUrl, target: "_blank", rel: "noopener noreferrer", text: "Yahoo Finance" }),
+    ];
+    if (updatedAt) sourceChildren.push(document.createTextNode(` · as of ${formatDate(updatedAt)}`));
     return el("div", { class: "pricing-box" }, [
       el("h4", { text: "Public market price" }),
       el("dl", { class: "pricing-rows" }, rows),
-      el("p", { class: "pricing-source", text: `Source: Yahoo Finance${updatedAt ? ` · as of ${formatDate(updatedAt)}` : ""}` }),
+      el("p", { class: "pricing-source" }, sourceChildren),
     ]);
   }
 
