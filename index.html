@@ -84,6 +84,11 @@
 
   .pricing-box { border: 1px solid #eee; border-radius: 8px; padding: 12px 16px; margin: 14px 0; background: #fafafa; }
   .pricing-box h4 { margin: 0 0 8px; font-size: 12.5px; color: #666; text-transform: uppercase; letter-spacing: 0.02em; }
+  .pricing-source-block { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #e9e9e9; }
+  .pricing-source-block:last-of-type { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .pricing-source-label { font-size: 12px; font-weight: 600; color: #555; margin: 0 0 5px; }
+  .pricing-source-label a { color: #0b3d91; text-decoration: underline; }
+  .pricing-source-label a:hover { color: #1a73e8; }
   .pricing-rows { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; }
   .pricing-rows dt { font-size: 13px; color: #666; }
   .pricing-rows dd { margin: 0; font-size: 13.5px; font-weight: 500; }
@@ -268,6 +273,16 @@
     return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   }
 
+  // Forge Global gives exact round dates (safe to run through formatDate);
+  // Clarity typically only gives month + year — stored as a plain label
+  // string (e.g. "Mar 2022") rather than an ISO date, to avoid implying a
+  // specific day that isn't real. Pass through anything that isn't a bare
+  // ISO date unchanged instead of reformatting it.
+  function formatRoundDate(d) {
+    if (!d) return "";
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? formatDate(d) : d;
+  }
+
   function formatSource(source) {
     return (source || "").replace(/^www\./, "");
   }
@@ -433,42 +448,58 @@
     container.appendChild(listEl);
   }
 
-  // A one-time manual snapshot (collected via a live browser session, since
-  // Forge Global's real pricing data is Cloudflare-protected and not
+  // A one-time manual snapshot per source (collected via a live browser
+  // session, since neither Forge Global's nor Clarity's real pricing data is
   // fetchable from a server-side function) — refreshed only on request, not
-  // polled. Omit the box entirely when no source was ever found (most
-  // companies); still show it, with just the source + note, when Forge
-  // lists the company but publishes no price/valuation data.
-  function renderPricingBox(snapshot, updatedAt) {
-    if (!snapshot || !snapshot.source) return null;
+  // polled. `snapshot.sources` is a list, one entry per secondary-market site
+  // checked (currently Forge Global and Clarity/Hiive) — a source still gets
+  // an entry (with just a note) when it lists the company but publishes no
+  // price/valuation data, or has no coverage at all, so it's visible that the
+  // source *was* checked rather than just missing. The box itself is omitted
+  // only when no source was ever checked (most companies).
+  function renderSourceBlock(src) {
     const rows = [];
-    if (snapshot.forge_price) {
-      const change = snapshot.forge_price_change ? ` (${snapshot.forge_price_change})` : "";
-      rows.push(["Forge Price", `${snapshot.forge_price}${change}`]);
+    if (src.price) {
+      const change = src.price_change ? ` (${src.price_change})` : "";
+      rows.push(["Price", `${src.price}${change}`]);
     }
-    if (snapshot.implied_valuation) rows.push(["Implied valuation", snapshot.implied_valuation]);
-    if (snapshot.last_round) {
-      const r = snapshot.last_round;
-      rows.push([`Last round — ${r.round}, ${formatDate(r.date)}`, `${r.price_per_share}/share · ${r.post_money_valuation} post-money`]);
+    if (src.implied_valuation) rows.push(["Implied valuation", src.implied_valuation]);
+    if (src.last_round) {
+      const r = src.last_round;
+      const parts = [];
+      if (r.price_per_share) parts.push(`${r.price_per_share}/share`);
+      if (r.post_money_valuation) parts.push(`${r.post_money_valuation} post-money`);
+      if (r.amount_raised) parts.push(`${r.amount_raised} raised`);
+      rows.push([`Last round — ${r.round}, ${formatRoundDate(r.date)}`, parts.join(" · ")]);
     }
-    if (snapshot.last_known_valuation) {
-      const v = snapshot.last_known_valuation;
+    if (src.last_known_valuation) {
+      const v = src.last_known_valuation;
       rows.push(["Last known valuation", `${v.amount} (${formatDate(v.as_of)})`]);
     }
 
-    const children = [el("h4", { text: "Secondary pricing (private market)" })];
+    const label = src.source_url
+      ? el("a", { href: src.source_url, target: "_blank", rel: "noopener noreferrer", text: src.source })
+      : document.createTextNode(src.source);
+    const children = [el("p", { class: "pricing-source-label" }, [label])];
     if (rows.length) {
-      children.push(el("dl", { class: "pricing-rows" }, rows.flatMap(([label, value]) => [
-        el("dt", { text: label }),
+      children.push(el("dl", { class: "pricing-rows" }, rows.flatMap(([lbl, value]) => [
+        el("dt", { text: lbl }),
         el("dd", { text: value }),
       ])));
     }
-    if (snapshot.note) children.push(el("p", { class: "pricing-note", text: snapshot.note }));
-    const sourceChildren = snapshot.source_url
-      ? [el("a", { href: snapshot.source_url, target: "_blank", rel: "noopener noreferrer", text: snapshot.source })]
-      : [document.createTextNode(snapshot.source)];
-    if (updatedAt) sourceChildren.push(document.createTextNode(` · as of ${formatDate(updatedAt)}`));
-    children.push(el("p", { class: "pricing-source" }, [document.createTextNode("Source: "), ...sourceChildren]));
+    if (src.note) children.push(el("p", { class: "pricing-note", text: src.note }));
+    return el("div", { class: "pricing-source-block" }, children);
+  }
+
+  function renderPricingBox(snapshot, updatedAt) {
+    const sources = (snapshot?.sources ?? []).filter((s) => s && s.source);
+    if (!sources.length) return null;
+
+    const children = [el("h4", { text: "Secondary pricing (private market)" })];
+    children.push(...sources.map(renderSourceBlock));
+    if (updatedAt) {
+      children.push(el("p", { class: "pricing-source", text: `As of ${formatDate(updatedAt)}` }));
+    }
     return el("div", { class: "pricing-box" }, children);
   }
 
