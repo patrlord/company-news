@@ -118,6 +118,8 @@
   .item-summary { font-size: 13px; color: #555; margin-top: 5px; line-height: 1.45; }
   .highlight-name { font-weight: 700; color: #0b3d91; background: #e8f0fe; padding: 0 4px;
                      border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .highlight-competitor { font-weight: 700; color: #8c1512; background: #fdecea; padding: 0 4px;
+                           border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
   .empty-note { font-size: 13px; color: #999; }
   .no-selection { color: #999; font-size: 14px; padding-top: 8px; }
   .denied { max-width: 420px; }
@@ -292,25 +294,37 @@
   }
 
   // Builds `tag` with `text` as its content, except any (case-insensitive)
-  // occurrence of one of `names` is wrapped in a bold, light-blue-boxed
-  // span — used to make it obvious at a glance where a tracked company or
-  // competitor is actually mentioned in a block of prose.
-  function renderHighlightedText(tag, text, names, extraProps = {}) {
-    const validNames = (names || []).filter(Boolean);
-    if (!validNames.length || !text) return el(tag, { ...extraProps, text: text || "" });
+  // occurrence of a name from one of `groups` is wrapped in a bold,
+  // light-boxed span in that group's color — used to make it obvious at a
+  // glance where a tracked company (blue) or one of its competitors (red)
+  // is actually mentioned in a block of prose. `groups` is a list of
+  // { names, className } — e.g. the company in "highlight-name" (blue) and
+  // its competitors in "highlight-competitor" (red), both checked at once
+  // so a single pass handles mentions of either kind anywhere in the text.
+  function renderHighlightedText(tag, text, groups, extraProps = {}) {
+    const pairs = [];
+    for (const g of groups) {
+      for (const name of g.names || []) {
+        if (name) pairs.push({ name, className: g.className });
+      }
+    }
+    if (!pairs.length || !text) return el(tag, { ...extraProps, text: text || "" });
 
-    const pattern = validNames.map(escapeRegExp).join("|");
+    // Longest name first — otherwise a shorter name that's a substring of a
+    // longer one (e.g. two competitors sharing a word) could split the
+    // longer match apart before it's ever checked as a whole.
+    pairs.sort((a, b) => b.name.length - a.name.length);
+    const pattern = pairs.map((p) => escapeRegExp(p.name)).join("|");
     const regex = new RegExp(`(${pattern})`, "gi");
     const parts = text.split(regex).filter((part) => part !== "");
-    const children = parts.map((part) =>
-      validNames.some((name) => name.toLowerCase() === part.toLowerCase())
-        ? el("span", { class: "highlight-name", text: part })
-        : document.createTextNode(part)
-    );
+    const children = parts.map((part) => {
+      const match = pairs.find((p) => p.name.toLowerCase() === part.toLowerCase());
+      return match ? el("span", { class: match.className, text: part }) : document.createTextNode(part);
+    });
     return el(tag, extraProps, children);
   }
 
-  function renderItemRow(item, companyName, onDismiss) {
+  function renderItemRow(item, highlightGroups, onDismiss) {
     const parts = [formatSource(item.source), formatDate(item.published_at || item.captured_at)].filter(Boolean);
     const titleRow = [
       item.url
@@ -323,7 +337,7 @@
       el("div", { class: "item-meta", text: parts.join(" · ") }),
     ];
     if (item.summary) {
-      children.push(renderHighlightedText("div", item.summary, [companyName], { class: "item-summary" }));
+      children.push(renderHighlightedText("div", item.summary, highlightGroups, { class: "item-summary" }));
     }
     const dismissBtn = el("button", {
       class: "item-dismiss-btn",
@@ -577,15 +591,22 @@
     if (publicPriceBox) container.append(publicPriceBox);
     const pricingBox = renderPricingBox(entry.pricing_snapshot, entry.pricing_updated_at);
     if (pricingBox) container.append(pricingBox);
+    // Company in blue, its competitors in red — an article or key-event
+    // bullet about the company often names a competitor too, so both get
+    // checked in the same pass wherever text is rendered on this page.
+    const highlightGroups = [
+      { names: [entry.company], className: "highlight-name" },
+      { names: entry.competitors.map((c) => c.name), className: "highlight-competitor" },
+    ];
     if (entry.key_events && entry.key_events.length) {
       container.append(el("div", { class: "key-events" }, [
         el("h4", { text: "Key events — last 6 months" }),
-        el("ul", {}, entry.key_events.map((bullet) => renderHighlightedText("li", bullet, [entry.company]))),
+        el("ul", {}, entry.key_events.map((bullet) => renderHighlightedText("li", bullet, highlightGroups))),
       ]));
     }
     container.append(
       entry.items.length
-        ? el("ul", { class: "item-list" }, entry.items.map((item) => renderItemRow(item, entry.company, async () => {
+        ? el("ul", { class: "item-list" }, entry.items.map((item) => renderItemRow(item, highlightGroups, async () => {
             const result = await postAction({ action: "dismiss_item", item_id: item.id });
             if (!result.ok) return false;
             entry.items = entry.items.filter((it) => it.id !== item.id);
@@ -672,10 +693,15 @@
     }
 
     if (entry.competitor_summary && entry.competitor_summary.length) {
-      const competitorNames = entry.competitors.map((c) => c.name);
+      // Competitors in red, the tracked company in blue — a bullet often
+      // compares a competitor's move back to the company itself.
+      const highlightGroups = [
+        { names: entry.competitors.map((c) => c.name), className: "highlight-competitor" },
+        { names: [entry.company], className: "highlight-name" },
+      ];
       container.append(el("div", { class: "key-events" }, [
         el("h4", { text: "Competitor news — last 6 months" }),
-        el("ul", {}, entry.competitor_summary.map((bullet) => renderHighlightedText("li", bullet, competitorNames))),
+        el("ul", {}, entry.competitor_summary.map((bullet) => renderHighlightedText("li", bullet, highlightGroups))),
       ]));
     } else {
       container.append(el("p", { class: "empty-note", text: "Collecting news for these competitors — check back soon." }));
