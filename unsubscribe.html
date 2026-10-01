@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="favicon.png">
+<title>Company news</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+         margin: 0; padding: 0 28px; color: #1a1a1a; box-sizing: border-box;
+         display: flex; align-items: center; justify-content: center; height: 100vh; }
+  #message { font-size: 15px; text-align: center; max-width: 420px; }
+  .error { color: #b3261e; }
+</style>
+</head>
+<body>
+<div id="message">Unsubscribing…</div>
+<script type="module">
+  const SUPABASE_URL = "https://eyejmvryyiaymrlenhxa.supabase.co";
+  const API_BASE = `${SUPABASE_URL}/functions/v1/company-news-unsubscribe`;
+
+  const el = document.getElementById("message");
+  const token = new URLSearchParams(location.search).get("token");
+
+  if (!token) {
+    el.textContent = "Missing unsubscribe link.";
+    el.classList.add("error");
+  } else {
+    try {
+      const res = await fetch(`${API_BASE}?token=${encodeURIComponent(token)}`);
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        el.textContent = "You are now unsubscribed from this email update.";
+      } else {
+        el.textContent = data.error || "Something went wrong. Please try again later.";
+        el.classList.add("error");
+      }
+    } catch {
+      el.textContent = "Something went wrong. Please try again later.";
+      el.classList.add("error");
+    }
+  }
+</script>
+</body>
+</html>
