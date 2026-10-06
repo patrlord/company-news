@@ -9,38 +9,101 @@
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
          margin: 0; padding: 0 28px; color: #1a1a1a; box-sizing: border-box;
-         display: flex; align-items: center; justify-content: center; height: 100vh; }
-  #message { font-size: 15px; text-align: center; max-width: 420px; }
+         display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  #app { width: 100%; max-width: 420px; }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  .hint { color: #666; font-size: 13px; margin: 0; }
+  label { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0;
+          font-size: 15px; cursor: pointer; }
+  label input { margin-top: 3px; width: 16px; height: 16px; cursor: pointer; }
+  label .desc { display: block; color: #666; font-size: 13px; margin-top: 2px; }
+  form { margin-top: 14px; border-top: 1px solid #e5e5e5; }
+  label + label { border-top: 1px solid #f0f0f0; }
+  button { margin-top: 10px; padding: 9px 16px; font-size: 14px; border: none;
+           border-radius: 6px; background: #1a1a1a; color: white; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .status { margin-top: 12px; font-size: 14px; min-height: 1.2em; }
   .error { color: #b3261e; }
+  .center { text-align: center; }
 </style>
 </head>
 <body>
-<div id="message">Unsubscribing…</div>
+<div id="app" class="center">Loading…</div>
 <script type="module">
   const SUPABASE_URL = "https://eyejmvryyiaymrlenhxa.supabase.co";
   const API_BASE = `${SUPABASE_URL}/functions/v1/company-news-unsubscribe`;
 
-  const el = document.getElementById("message");
+  const app = document.getElementById("app");
   const token = new URLSearchParams(location.search).get("token");
 
-  if (!token) {
-    el.textContent = "Missing unsubscribe link.";
-    el.classList.add("error");
-  } else {
-    try {
-      const res = await fetch(`${API_BASE}?token=${encodeURIComponent(token)}`);
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        el.textContent = "You are now unsubscribed from this email update.";
-      } else {
-        el.textContent = data.error || "Something went wrong. Please try again later.";
-        el.classList.add("error");
-      }
-    } catch {
-      el.textContent = "Something went wrong. Please try again later.";
-      el.classList.add("error");
-    }
+  function showError(message) {
+    app.className = "center error";
+    app.textContent = message;
   }
+
+  async function load() {
+    if (!token) return showError("Missing unsubscribe link.");
+    let res, data;
+    try {
+      res = await fetch(`${API_BASE}?token=${encodeURIComponent(token)}`);
+      data = await res.json();
+    } catch {
+      return showError("Something went wrong. Please try again later.");
+    }
+    if (!res.ok || !data.ok) return showError(data?.error || "Something went wrong. Please try again later.");
+    render(data);
+  }
+
+  function render({ daily, weekly }) {
+    app.className = "";
+    app.innerHTML = `
+      <h1>Email preferences</h1>
+      <p class="hint">Choose which company news emails you'd like to receive.</p>
+      <form id="form">
+        <label>
+          <input type="checkbox" id="daily" ${daily ? "checked" : ""}>
+          <span>Daily digest<span class="desc">News from the last 24 hours, every morning</span></span>
+        </label>
+        <label>
+          <input type="checkbox" id="weekly" ${weekly ? "checked" : ""}>
+          <span>Weekly digest<span class="desc">A recap of the last 7 days, every Monday morning</span></span>
+        </label>
+        <button type="submit" id="save">Save preferences</button>
+        <div class="status" id="status"></div>
+      </form>`;
+
+    const form = document.getElementById("form");
+    const status = document.getElementById("status");
+    const save = document.getElementById("save");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      status.className = "status";
+      status.textContent = "";
+      save.disabled = true;
+      const wantDaily = document.getElementById("daily").checked;
+      const wantWeekly = document.getElementById("weekly").checked;
+      try {
+        const res = await fetch(API_BASE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, daily: wantDaily, weekly: wantWeekly }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data?.error || "failed");
+        status.textContent = !data.daily && !data.weekly
+          ? "You are now unsubscribed from all email updates."
+          : "Your preferences have been saved.";
+      } catch {
+        status.className = "status error";
+        status.textContent = "Something went wrong. Please try again.";
+      } finally {
+        save.disabled = false;
+      }
+    });
+  }
+
+  load();
 </script>
 </body>
 </html>
